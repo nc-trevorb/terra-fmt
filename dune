@@ -5,6 +5,5 @@
 
 (executable
  (name main)
- (modules_without_implementation prog)
  (libraries core core_unix.command_unix str)
  )

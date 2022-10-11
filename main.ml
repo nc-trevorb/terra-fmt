@@ -6,7 +6,7 @@ let print_position outx lexbuf =
     pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1)
 
 let parse_with_error lexbuf =
-  try Parser.prog Lexer.read lexbuf with
+  try Parser.prog (Lexer.read true) lexbuf with
   | Lexer.SyntaxError msg ->
      Printf.fprintf stderr "%a: (lex) %s\n" print_position lexbuf msg;
      None

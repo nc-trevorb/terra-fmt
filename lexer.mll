@@ -2,6 +2,8 @@
 open Parser
 
 exception SyntaxError of string
+
+let p debug label s = if debug then Printf.printf "%s: %s\n" label s
 }
 
 let int = '-'? ['0'-'9'] ['0'-'9']*
@@ -12,12 +14,12 @@ let float = digit* frac? exp?
 let whitespace = [' ' '\t']+
 let newline = '\r' | '\n' | "\r\n"
 (* let blank_line = "\n\n" *)
-let id = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '0'-'9' '_']*
+let ident = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '0'-'9' '_' '.']*
 
-rule read =
+rule read debug =
   parse
-  | whitespace { read lexbuf }
-  | newline    { Lexing.new_line lexbuf; read lexbuf }
+  | whitespace { read debug lexbuf }
+  | newline    { Lexing.new_line lexbuf; read debug lexbuf }
   | int        { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | float      { FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
   (* | "true"     { TRUE } *)
@@ -25,41 +27,25 @@ rule read =
   | "null"     { NULL }
   | "resource" { RESOURCE_KW }
   | "# module" [^ '\n']* { CHANGE_COMMENT }
-  | whitespace* "# (" [^ '\n']* '\n' { Lexing.new_line lexbuf; read lexbuf }
-  (* | whitespace* "# (" [^ '\n']* '\n' { print_endline "matched ws"; Lexing.new_line lexbuf; read lexbuf } *)
+  | whitespace* "# (" [^ '\n']* '\n' { Lexing.new_line lexbuf; read debug lexbuf }
   | '~'        { TILDA }
   | '"'        { read_string (Buffer.create 17) lexbuf }
   | '{'        { LEFT_BRACE }
   | '}'        { RIGHT_BRACE }
   | '['        { LEFT_BRACK }
   | ']'        { RIGHT_BRACK }
+  | '('        { LEFT_PAREN }
+  | ')'        { RIGHT_PAREN }
+  | '+'        { PLUS }
+  | '-'        { MINUS }
+  | '<'        { LESS_THAN }
   | '='        { EQUAL }
   | ','        { COMMA }
-  | _          {
-        (* FIXME should return an IDENT *)
-        let buf = (Buffer.create 17) in
-        Buffer.add_string buf (Lexing.lexeme lexbuf);
-        read_section false buf lexbuf
-      }
-  (* | _          { raise (SyntaxError ("Unexpected char: " ^ Lexing.lexeme lexbuf)) } *)
+  | ':'        { COLON }
+  | "..."      { ELLIPSIS }
+  | ident      { p debug "ident" (Lexing.lexeme lexbuf); IDENT (Lexing.lexeme lexbuf) }
   | eof        { EOF }
-and read_section last_char_was_newline buf =
-  parse
-  | '\n' {
-    Lexing.new_line lexbuf;
-    if last_char_was_newline then
-      SECTION (Buffer.contents buf)
-    else
-      (Buffer.add_string buf (Lexing.lexeme lexbuf); read_section true buf lexbuf)
-    }
-  | eof {
-    (* the last section in a file doesn't need the trailing blank line *)
-    SECTION (Buffer.contents buf)
-    }
-  | whitespace* "# (" [^ '\n']* '\n' { Lexing.new_line lexbuf; read_section true buf lexbuf }
-  | _ {
-    Buffer.add_string buf (Lexing.lexeme lexbuf); read_section false buf lexbuf
-    }
+  | _          { raise (SyntaxError ("Unexpected char: " ^ Lexing.lexeme lexbuf)) }
 and read_string buf =
   parse
   | '"'       { STRING (Buffer.contents buf) }

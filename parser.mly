@@ -2,7 +2,6 @@
 %token <float> FLOAT
 %token <string> IDENT
 %token <string> STRING (* text surrounded by double quotes *)
-%token <string> SECTION (* text followed by a blank line FIXME: this should be a rule instead of a token *)
 
 %token CHANGE_COMMENT
 %token TILDA
@@ -15,8 +14,16 @@
 %token RIGHT_BRACE
 %token LEFT_BRACK
 %token RIGHT_BRACK
+%token LEFT_PAREN
+%token RIGHT_PAREN
 %token EQUAL
+%token ELLIPSIS
+%token SLASH
+%token PLUS
+%token MINUS
+%token LESS_THAN
 %token COMMA
+%token COLON
 %token EOL
 %token EOF
 
@@ -25,19 +32,55 @@
 %%
 
 prog:
-| state_refreshes = SECTION;
-  _legend = SECTION;
-  _terraform_will_perform_the_following_actions = SECTION;
+| state_refreshes = list(state_refresh);
+  legend;
+  _terraform_will_perform_the_following_actions = section;
   resource_diffs = list(resource_diff);
   EOF
   { Some {
-        resource_state_refreshes = Str.split (Str.regexp "\n") state_refreshes;
+        resource_state_refreshes = state_refreshes;
         diffs = resource_diffs;
       }
   }
 | EOF
   { None }
 ;
+
+legend:
+  | list(IDENT); COLON; list(legend_key) { () }
+
+legend_key:
+  | change_symbol; list(ident_or_parens) { () }
+
+change_symbol:
+  | PLUS
+  | TILDA
+  | MINUS
+  | PLUS; SLASH; MINUS;
+  | MINUS; SLASH; PLUS;
+  | LESS_THAN; EQUAL;
+    { () }
+
+(* this can handle parsing words wrapped in parentheses, but it might be better
+   to just allow optional LEFT_PAREN/RIGHT_PAREN tokens between each IDENT *)
+ident_or_parens:
+  | IDENT { () }
+  | LEFT_PAREN; list(IDENT); RIGHT_PAREN; { () }
+
+state_refresh:
+  | IDENT; option(array_index); COLON; refreshing_state; new_value { () }
+
+array_index:
+  | LEFT_BRACK; INT; RIGHT_BRACK { () }
+
+refreshing_state:
+  | IDENT; IDENT { () }
+
+new_value:
+  | LEFT_BRACK; IDENT; EQUAL; v = IDENT; RIGHT_BRACK { v }
+
+section:
+  | _ids = list(IDENT); EOL; EOL { () }
 
 resource_diff:
   | CHANGE_COMMENT;
@@ -55,7 +98,7 @@ diff_object:
   { Terraform.build_changes kvs }
 
 diff_kv:
-| option(TILDA); k = STRING; EQUAL; v = STRING { (k, v) }
+| option(TILDA); k = IDENT; EQUAL; v = STRING { (k, v) }
 
 diff_val:
   (* | LEFT_BRACE; obj_fields; RIGHT_BRACE { "object" } *)
